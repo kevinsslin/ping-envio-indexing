@@ -1,150 +1,154 @@
-type Ping_Approval {
-  id: ID!
-  owner: String!
-  spender: String!
-  value: BigInt!
+# Token entity - Global token statistics (singleton per chain)
+type Token {
+  id: ID! # chainId_tokenAddress
+  chainId: BigInt!
+  address: String!
+  symbol: String!
+  name: String!
+  decimals: BigInt!
+  totalSupply: BigInt!
+
+  # Volume and transaction stats
+  totalTransfers: BigInt!
+  totalVolume: BigDecimal!
+
+  # Account stats
+  holderCount: BigInt! # Number of unique holders
 }
 
-type Ping_AuthorizationCanceled {
-  id: ID!
-  authorizer: String!
-  nonce: String!
+# Account entity - Tracks individual user balances and activity
+type Account {
+  id: ID! # chainId_accountAddress
+  chainId: BigInt!
+  address: String!
+
+  # Balance
+  balance: BigDecimal!
+
+  # Activity stats
+  totalSent: BigDecimal!
+  totalReceived: BigDecimal!
+  transferCount: BigInt!
+
+  # Timestamps
+  firstTransferAt: BigInt!
+  lastTransferAt: BigInt!
+
+  # Derived fields
+  sentTransfers: [Transfer!]! @derivedFrom(field: "from")
+  receivedTransfers: [Transfer!]! @derivedFrom(field: "to")
 }
 
-type Ping_AuthorizationUsed {
-  id: ID!
-  authorizer: String!
-  nonce: String!
+# Transfer entity - Individual transfer records
+type Transfer @index(fields: ["timestamp", "isPoolRelated"]) {
+  id: ID! # chainId_blockNumber_logIndex
+  chainId: BigInt!
+  transactionHash: String!
+  timestamp: BigInt! @index
+  blockNumber: BigInt!
+  logIndex: BigInt!
+
+  # Transfer details
+  from: Account!
+  to: Account!
+  value: BigDecimal!
+
+  # Pool relation
+  isPoolRelated: Boolean! # True if from or to is the Pool address
+  poolRelatedType: String # "FROM_POOL", "TO_POOL", or "NONE"
 }
 
-type Ping_EIP712DomainChanged {
-  id: ID!
-}
+# Pool entity - Uniswap V3 Pool statistics
+type Pool {
+  id: ID! # chainId_poolAddress
+  chainId: BigInt!
+  address: String!
 
-type Ping_FeesCollected {
-  id: ID!
-  recipient: String!
-  amountToken0: BigInt!
-  amountToken1: BigInt!
-}
+  # Pool info
+  token0: String! # Token address
+  token1: String! # Token address
+  feeTier: BigInt!
 
-type Ping_LiquidityDeployed {
-  id: ID!
-  tokenId: BigInt!
+  # Current state
   liquidity: BigInt!
-}
-
-type Ping_OwnershipTransferred {
-  id: ID!
-  previousOwner: String!
-  newOwner: String!
-}
-
-type Ping_RoleAdminChanged {
-  id: ID!
-  role: String!
-  previousAdminRole: String!
-  newAdminRole: String!
-}
-
-type Ping_RoleGranted {
-  id: ID!
-  role: String!
-  account: String!
-  sender: String!
-}
-
-type Ping_RoleRevoked {
-  id: ID!
-  role: String!
-  account: String!
-  sender: String!
-}
-
-type Ping_Transfer {
-  id: ID!
-  from: String!
-  to: String!
-  value: BigInt!
-}
-
-type UniswapV3Pool_Burn {
-  id: ID!
-  owner: String!
-  tickLower: BigInt!
-  tickUpper: BigInt!
-  amount: BigInt!
-  amount0: BigInt!
-  amount1: BigInt!
-}
-
-type UniswapV3Pool_Collect {
-  id: ID!
-  owner: String!
-  recipient: String!
-  tickLower: BigInt!
-  tickUpper: BigInt!
-  amount0: BigInt!
-  amount1: BigInt!
-}
-
-type UniswapV3Pool_CollectProtocol {
-  id: ID!
-  sender: String!
-  recipient: String!
-  amount0: BigInt!
-  amount1: BigInt!
-}
-
-type UniswapV3Pool_Flash {
-  id: ID!
-  sender: String!
-  recipient: String!
-  amount0: BigInt!
-  amount1: BigInt!
-  paid0: BigInt!
-  paid1: BigInt!
-}
-
-type UniswapV3Pool_IncreaseObservationCardinalityNext {
-  id: ID!
-  observationCardinalityNextOld: BigInt!
-  observationCardinalityNextNew: BigInt!
-}
-
-type UniswapV3Pool_Initialize {
-  id: ID!
   sqrtPriceX96: BigInt!
   tick: BigInt!
+
+  # Volume stats
+  volumeToken0: BigDecimal!
+  volumeToken1: BigDecimal!
+  txCount: BigInt! @index
+
+  # TVL
+  totalValueLockedToken0: BigDecimal!
+  totalValueLockedToken1: BigDecimal!
+
+  # Timestamps
+  createdAt: BigInt!
+  lastSwapAt: BigInt!
+
+  # Derived fields
+  swaps: [Swap!]! @derivedFrom(field: "pool")
 }
 
-type UniswapV3Pool_Mint {
-  id: ID!
-  sender: String!
-  owner: String!
-  tickLower: BigInt!
-  tickUpper: BigInt!
-  amount: BigInt!
-  amount0: BigInt!
-  amount1: BigInt!
-}
+# Swap entity - Individual swap records
+type Swap @index(fields: ["timestamp", "pool"]) {
+  id: ID! # chainId_blockNumber_logIndex
+  chainId: BigInt!
+  transactionHash: String!
+  timestamp: BigInt! @index
+  blockNumber: BigInt!
+  logIndex: BigInt!
 
-type UniswapV3Pool_SetFeeProtocol {
-  id: ID!
-  feeProtocol0Old: BigInt!
-  feeProtocol1Old: BigInt!
-  feeProtocol0New: BigInt!
-  feeProtocol1New: BigInt!
-}
-
-type UniswapV3Pool_Swap {
-  id: ID!
+  # Swap details
+  pool: Pool!
   sender: String!
   recipient: String!
-  amount0: BigInt!
-  amount1: BigInt!
+
+  # Amounts (can be negative in V3)
+  amount0: BigDecimal!
+  amount1: BigDecimal!
+
+  # Pool state after swap
   sqrtPriceX96: BigInt!
   liquidity: BigInt!
   tick: BigInt!
 }
 
+# DailyTokenActivity - Daily aggregated token statistics
+type DailyTokenActivity {
+  id: ID! # chainId_date (YYYY-MM-DD)
+  chainId: BigInt!
+  date: String! # YYYY-MM-DD format
+  timestamp: BigInt! # Start of day timestamp
+
+  # Transfer stats
+  dailyTransfers: BigInt!
+  dailyVolume: BigDecimal!
+
+  # Account activity
+  dailyActiveAccounts: BigInt! # Unique addresses that sent or received
+  newAccounts: BigInt! # New addresses that received their first tokens
+}
+
+# DailyPoolActivity - Daily aggregated pool statistics
+type DailyPoolActivity {
+  id: ID! # chainId_poolAddress_date
+  chainId: BigInt!
+  pool: String! # Pool address
+  date: String! # YYYY-MM-DD format
+  timestamp: BigInt! # Start of day timestamp
+
+  # Swap stats
+  dailySwaps: BigInt!
+  dailyVolumeToken0: BigDecimal!
+  dailyVolumeToken1: BigDecimal!
+
+  # Liquidity snapshots
+  liquidityStart: BigInt! # Liquidity at start of day
+  liquidityEnd: BigInt! # Liquidity at end of day
+
+  # Price snapshots
+  sqrtPriceX96Start: BigInt!
+  sqrtPriceX96End: BigInt!
+}
