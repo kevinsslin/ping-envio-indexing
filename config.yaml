@@ -2,7 +2,7 @@
 name: ping-envio-indexing
 networks:
 - id: 8453
-  start_block: 20000000  # Start from a more recent block to reduce initial load
+  start_block: 37000833
   contracts:
   - name: Ping
     address:
