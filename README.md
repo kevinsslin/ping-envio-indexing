@@ -113,8 +113,6 @@ query DailyActivity {
 }
 ```
 
-More examples in `CONFIGURATION.md`
-
 ## 🛠 Utility Scripts
 
 ```bash
@@ -159,8 +157,6 @@ To adapt this indexer for other tokens/pools, update:
 1. **Token metadata** in `src/utils/constants.ts`
 2. **Pool configuration** in `src/handlers/swap-handler.ts`
 3. **Start block** in `config.yaml` for faster syncing
-
-See `CONFIGURATION.md` for detailed instructions.
 
 ## 📄 License
 
