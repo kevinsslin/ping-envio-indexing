@@ -1,13 +1,14 @@
 /**
  * Swap event handler for Uniswap V3 Pools
- * Tracks swap events, pool statistics, and daily activity for all PING pools
+ * Tracks swap events, pool statistics, daily activity, and account buy/sell activity for all PING pools
  */
-import { UniswapV3Pool, Pool, Swap, DailyPoolActivity } from "generated";
+import { UniswapV3Pool, Pool, Swap, DailyPoolActivity, Account } from "generated";
 import {
   ZERO_BD,
   ONE_BI,
   ONE_BD,
   ZERO_BI,
+  PING_TOKEN_ADDRESS,
 } from "../utils/constants";
 import {
   convertTokenToDecimal,
@@ -107,6 +108,93 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
     liquidity: currentLiquidity,
     tick: event.params.tick,
   };
+
+  // Track Account buy/sell activity based on transaction initiator
+  // Normalize PING token address for comparison
+  const pingAddress = normalizeAddress(PING_TOKEN_ADDRESS);
+  const token0Address = normalizeAddress(pool.token0);
+  const token1Address = normalizeAddress(pool.token1);
+
+  // Determine if PING is token0 or token1
+  const isPingToken0 = token0Address === pingAddress;
+  const isPingToken1 = token1Address === pingAddress;
+
+  // Only track buy/sell if this pool involves PING token
+  if (isPingToken0 || isPingToken1) {
+    const txInitiator = normalizeAddress(event.transaction.from);
+    const recipient = normalizeAddress(event.params.recipient);
+    const txHash = event.transaction.hash;
+    const timestamp = BigInt(event.block.timestamp);
+
+    // Determine if this is a BUY or SELL based on PING amount direction
+    let isBuy = false;
+    let isSell = false;
+    let pingAmount = ZERO_BD;
+
+    if (isPingToken0) {
+      // PING is token0
+      // Positive amount0 = PING coming out of pool (BUY)
+      // Negative amount0 = PING going into pool (SELL)
+      if (amount0Raw > 0) {
+        isBuy = true;
+        pingAmount = amount0Abs;
+      } else if (amount0Raw < 0) {
+        isSell = true;
+        pingAmount = amount0Abs;
+      }
+    } else if (isPingToken1) {
+      // PING is token1
+      // Positive amount1 = PING coming out of pool (BUY)
+      // Negative amount1 = PING going into pool (SELL)
+      if (amount1Raw > 0) {
+        isBuy = true;
+        pingAmount = amount1Abs;
+      } else if (amount1Raw < 0) {
+        isSell = true;
+        pingAmount = amount1Abs;
+      }
+    }
+
+    // Update Account for BUY (recipient receives PING from pool)
+    if (isBuy && pingAmount.gt(ZERO_BD)) {
+      const accountId = `${chainId}_${recipient}`;
+      const account = await context.Account.get(accountId);
+
+      if (account) {
+        context.Account.set({
+          ...account,
+          lastBuyAt: timestamp,
+          lastBuyHash: txHash,
+          totalBuys: account.totalBuys + ONE_BI,
+          totalBuyVolume: account.totalBuyVolume.plus(pingAmount),
+        });
+
+        context.log.info(
+          `Updated BUY for account ${recipient}: ${pingAmount} PING`
+        );
+      }
+    }
+
+    // Update Account for SELL (transaction initiator sends PING to pool)
+    if (isSell && pingAmount.gt(ZERO_BD)) {
+      const accountId = `${chainId}_${txInitiator}`;
+      const account = await context.Account.get(accountId);
+
+      if (account) {
+        context.Account.set({
+          ...account,
+          lastSellAt: timestamp,
+          lastSellHash: txHash,
+          totalSells: account.totalSells + ONE_BI,
+          totalSellVolume: account.totalSellVolume.plus(pingAmount),
+        });
+
+        context.log.info(
+          `Updated SELL for account ${txInitiator}: ${pingAmount} PING`
+        );
+      }
+    }
+  }
 
   // Update or create DailyPoolActivity
   const dayStartTimestamp = getDayStartTimestamp(BigInt(event.block.timestamp));
