@@ -4,8 +4,7 @@
  */
 
 import {
-  UniswapV3Factory_PoolCreated_eventArgs,
-  UniswapV3Factory_PoolCreated_handlerContext,
+  UniswapV3Factory,
   Pool,
 } from "generated";
 import {
@@ -18,12 +17,9 @@ import {
  * Handles PoolCreated events from Uniswap V3 Factory
  * Only tracks pools that include the PING token
  */
-export async function handlePoolCreated(
-  event: UniswapV3Factory_PoolCreated_eventArgs,
-  context: UniswapV3Factory_PoolCreated_handlerContext
-): Promise<void> {
-  const { token0, token1, fee, tickSpacing, pool } = event;
-  const chainId = BigInt(context.chainId);
+UniswapV3Factory.PoolCreated.handler(async ({ event, context }) => {
+  const { token0, token1, fee, tickSpacing, pool } = event.params;
+  const chainId = BigInt(event.chainId);
 
   // Check if this pool contains PING token
   const isPingPool =
@@ -72,17 +68,17 @@ export async function handlePoolCreated(
     totalValueLockedToken1: ZERO_BD,
 
     // Timestamps
-    createdAt: BigInt(context.timestamp),
-    createdAtBlock: BigInt(context.blockNumber),
+    createdAt: BigInt(event.block.timestamp),
+    createdAtBlock: BigInt(event.block.number),
     lastSwapAt: ZERO_BI,
   };
 
   context.Pool.set(poolEntity);
 
   context.log.info(
-    `Pool entity created for ${pool} at block ${context.blockNumber}`
+    `Pool entity created for ${pool} at block ${event.block.number}`
   );
 
   // Note: The pool will automatically start being indexed for Swap events
   // once it's created, as long as it's registered in the wildcard contract config
-}
+});
