@@ -12,6 +12,7 @@ import {
   ZERO_BI,
   ZERO_BD,
 } from "../utils/constants";
+import { fetchTokenMetadata } from "../utils/token-metadata";
 
 /**
  * Register new PING pools for dynamic event tracking
@@ -57,6 +58,13 @@ UniswapV3Factory.PoolCreated.handler(async ({ event, context }) => {
     `New PING pool created: ${pool} (${token0}/${token1}, fee: ${fee})`
   );
 
+  // Fetch token metadata for both tokens
+  context.log.info(`Fetching metadata for token0: ${token0} and token1: ${token1}`);
+  const [token0Metadata, token1Metadata] = await Promise.all([
+    fetchTokenMetadata(token0),
+    fetchTokenMetadata(token1),
+  ]);
+
   // Create Pool entity
   const poolId = `${chainId}_${pool.toLowerCase()}`;
   const poolEntity: Pool = {
@@ -69,6 +77,16 @@ UniswapV3Factory.PoolCreated.handler(async ({ event, context }) => {
     token1: token1.toLowerCase(),
     feeTier: BigInt(fee),
     tickSpacing: BigInt(tickSpacing),
+
+    // Token0 metadata
+    token0Symbol: token0Metadata.symbol,
+    token0Name: token0Metadata.name,
+    token0Decimals: token0Metadata.decimals,
+
+    // Token1 metadata
+    token1Symbol: token1Metadata.symbol,
+    token1Name: token1Metadata.name,
+    token1Decimals: token1Metadata.decimals,
 
     // Initial state (will be updated by Initialize event)
     liquidity: ZERO_BI,

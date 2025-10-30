@@ -83,6 +83,16 @@ type Pool {
   feeTier: BigInt!
   tickSpacing: BigInt!
 
+  # Token0 metadata (for frontend display)
+  token0Symbol: String! # e.g., "PING"
+  token0Name: String! # e.g., "Ping"
+  token0Decimals: BigInt! # e.g., 18
+
+  # Token1 metadata (for frontend display)
+  token1Symbol: String! # e.g., "USDC"
+  token1Name: String! # e.g., "USD Coin"
+  token1Decimals: BigInt! # e.g., 6
+
   # Current state
   liquidity: BigInt! @index # For filtering pools by liquidity
   sqrtPriceX96: BigInt!

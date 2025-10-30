@@ -4,7 +4,6 @@
  */
 import { UniswapV3Pool, Pool, Swap, DailyPoolActivity } from "generated";
 import {
-  PING_TOKEN_ADDRESS,
   ZERO_BD,
   ONE_BI,
   ONE_BD,
@@ -16,37 +15,6 @@ import {
   getDayStartTimestamp,
   normalizeAddress,
 } from "../utils/index";
-
-/**
- * Get token decimals for known tokens
- * Add more tokens as needed
- */
-function getTokenDecimals(tokenAddress: string): bigint {
-  const addr = tokenAddress.toLowerCase();
-
-  // PING token
-  if (addr === PING_TOKEN_ADDRESS.toLowerCase()) {
-    return 18n;
-  }
-
-  // USDC on Base
-  if (addr === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") {
-    return 6n;
-  }
-
-  // WETH on Base
-  if (addr === "0x4200000000000000000000000000000000000006") {
-    return 18n;
-  }
-
-  // DAI on Base
-  if (addr === "0x50c5725949a6f0c72e6c4a641f24049a917db0cb") {
-    return 18n;
-  }
-
-  // Default to 18 decimals (most ERC20 tokens use 18)
-  return 18n;
-}
 
 UniswapV3Pool.Swap.handler(async ({ event, context }) => {
   const chainId = BigInt(event.chainId);
@@ -76,9 +44,9 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
     return;
   }
 
-  // Get token decimals
-  const token0Decimals = getTokenDecimals(pool.token0);
-  const token1Decimals = getTokenDecimals(pool.token1);
+  // Get token decimals from pool metadata
+  const token0Decimals = pool.token0Decimals;
+  const token1Decimals = pool.token1Decimals;
 
   // Convert amounts to decimal
   // In Uniswap V3, negative amount means tokens going into the pool
