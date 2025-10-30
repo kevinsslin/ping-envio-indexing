@@ -14,6 +14,26 @@ import {
 } from "../utils/constants";
 
 /**
+ * Register new PING pools for dynamic event tracking
+ * This must come BEFORE the handler to enable Envio's Factory Pattern
+ */
+UniswapV3Factory.PoolCreated.contractRegister(({ event, context }) => {
+  const { token0, token1, pool } = event.params;
+
+  // Only register pools that contain PING token
+  const isPingPool =
+    token0.toLowerCase() === PING_TOKEN_ADDRESS.toLowerCase() ||
+    token1.toLowerCase() === PING_TOKEN_ADDRESS.toLowerCase();
+
+  if (isPingPool) {
+    context.addUniswapV3Pool(pool);
+    context.log.info(
+      `Registered PING pool for dynamic tracking: ${pool} (${token0}/${token1})`
+    );
+  }
+});
+
+/**
  * Handles PoolCreated events from Uniswap V3 Factory
  * Only tracks pools that include the PING token
  */

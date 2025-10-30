@@ -30,8 +30,6 @@ networks:
     events:
     - event: PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)
   - name: UniswapV3Pool
-    address:
-    - 0xBc51DB8aEC659027AE0B0E468C0735418161A780
     handler: src/EventHandlers.ts
     events:
     - event: Burn(address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)
