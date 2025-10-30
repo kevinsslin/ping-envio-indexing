@@ -131,16 +131,6 @@ Ping.Transfer.handler(async ({ event, context }) => {
           transferCount: fromAccount.transferCount + ONE_BI,
           lastTransferAt: timestamp,
           lastTransferHash: txHash,
-          // Update sell tracking if sending to pool
-          lastSellAt: poolRelatedType === POOL_RELATION_SELL ? timestamp : fromAccount.lastSellAt,
-          lastSellHash: poolRelatedType === POOL_RELATION_SELL ? txHash : fromAccount.lastSellHash,
-          totalSells: poolRelatedType === POOL_RELATION_SELL ? fromAccount.totalSells + ONE_BI : fromAccount.totalSells,
-          totalSellVolume: poolRelatedType === POOL_RELATION_SELL ? fromAccount.totalSellVolume.plus(transferValue) : fromAccount.totalSellVolume,
-          // Keep buy fields unchanged
-          lastBuyAt: fromAccount.lastBuyAt,
-          lastBuyHash: fromAccount.lastBuyHash,
-          totalBuys: fromAccount.totalBuys,
-          totalBuyVolume: fromAccount.totalBuyVolume,
         }
       : {
           id: `${chainId}_${fromAddress}`,
@@ -153,15 +143,15 @@ Ping.Transfer.handler(async ({ event, context }) => {
           firstTransferAt: timestamp,
           lastTransferAt: timestamp,
           lastTransferHash: txHash,
-          // Initialize buy/sell fields
+          // Buy/sell fields will be tracked by swap-handler
           lastBuyAt: undefined,
           lastBuyHash: undefined,
-          lastSellAt: poolRelatedType === POOL_RELATION_SELL ? timestamp : undefined,
-          lastSellHash: poolRelatedType === POOL_RELATION_SELL ? txHash : undefined,
+          lastSellAt: undefined,
+          lastSellHash: undefined,
           totalBuys: ZERO_BI,
-          totalSells: poolRelatedType === POOL_RELATION_SELL ? ONE_BI : ZERO_BI,
+          totalSells: ZERO_BI,
           totalBuyVolume: ZERO_BD,
-          totalSellVolume: poolRelatedType === POOL_RELATION_SELL ? transferValue : ZERO_BD,
+          totalSellVolume: ZERO_BD,
         };
 
     context.Account.set(updatedFromAccount);
@@ -177,16 +167,6 @@ Ping.Transfer.handler(async ({ event, context }) => {
           transferCount: toAccount.transferCount + ONE_BI,
           lastTransferAt: timestamp,
           lastTransferHash: txHash,
-          // Update buy tracking if receiving from pool
-          lastBuyAt: poolRelatedType === POOL_RELATION_BUY ? timestamp : toAccount.lastBuyAt,
-          lastBuyHash: poolRelatedType === POOL_RELATION_BUY ? txHash : toAccount.lastBuyHash,
-          totalBuys: poolRelatedType === POOL_RELATION_BUY ? toAccount.totalBuys + ONE_BI : toAccount.totalBuys,
-          totalBuyVolume: poolRelatedType === POOL_RELATION_BUY ? toAccount.totalBuyVolume.plus(transferValue) : toAccount.totalBuyVolume,
-          // Keep sell fields unchanged
-          lastSellAt: toAccount.lastSellAt,
-          lastSellHash: toAccount.lastSellHash,
-          totalSells: toAccount.totalSells,
-          totalSellVolume: toAccount.totalSellVolume,
         }
       : {
           id: `${chainId}_${toAddress}`,
@@ -199,14 +179,14 @@ Ping.Transfer.handler(async ({ event, context }) => {
           firstTransferAt: timestamp,
           lastTransferAt: timestamp,
           lastTransferHash: txHash,
-          // Initialize buy/sell fields
-          lastBuyAt: poolRelatedType === POOL_RELATION_BUY ? timestamp : undefined,
-          lastBuyHash: poolRelatedType === POOL_RELATION_BUY ? txHash : undefined,
+          // Buy/sell fields will be tracked by swap-handler
+          lastBuyAt: undefined,
+          lastBuyHash: undefined,
           lastSellAt: undefined,
           lastSellHash: undefined,
-          totalBuys: poolRelatedType === POOL_RELATION_BUY ? ONE_BI : ZERO_BI,
+          totalBuys: ZERO_BI,
           totalSells: ZERO_BI,
-          totalBuyVolume: poolRelatedType === POOL_RELATION_BUY ? transferValue : ZERO_BD,
+          totalBuyVolume: ZERO_BD,
           totalSellVolume: ZERO_BD,
         };
 
