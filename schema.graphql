@@ -33,6 +33,18 @@ type Account {
   # Timestamps
   firstTransferAt: BigInt!
   lastTransferAt: BigInt!
+  lastTransferHash: String!
+
+  # Buy/Sell tracking (pool interactions)
+  lastBuyAt: BigInt # Last time bought from pool
+  lastBuyHash: String # Transaction hash of last buy
+  lastSellAt: BigInt # Last time sold to pool
+  lastSellHash: String # Transaction hash of last sell
+
+  totalBuys: BigInt! # Total number of buys from pools
+  totalSells: BigInt! # Total number of sells to pools
+  totalBuyVolume: BigDecimal! # Total volume bought from pools
+  totalSellVolume: BigDecimal! # Total volume sold to pools
 
   # Derived fields
   sentTransfers: [Transfer!]! @derivedFrom(field: "from")
@@ -54,8 +66,9 @@ type Transfer @index(fields: ["timestamp", "isPoolRelated"]) {
   value: BigDecimal!
 
   # Pool relation
-  isPoolRelated: Boolean! # True if from or to is the Pool address
-  poolRelatedType: String # "FROM_POOL", "TO_POOL", or "NONE"
+  isPoolRelated: Boolean! # True if from or to is a Pool address
+  poolRelatedType: String # "BUY" (from pool), "SELL" (to pool), or "NONE"
+  relatedPool: Pool # The pool involved in this transfer (if any)
 }
 
 # Pool entity - Uniswap V3 Pool statistics
@@ -68,11 +81,15 @@ type Pool {
   token0: String! # Token address
   token1: String! # Token address
   feeTier: BigInt!
+  tickSpacing: BigInt!
 
   # Current state
-  liquidity: BigInt!
+  liquidity: BigInt! @index # For filtering pools by liquidity
   sqrtPriceX96: BigInt!
   tick: BigInt!
+
+  # Status
+  isActive: Boolean! # Has sufficient liquidity (>0)
 
   # Volume stats
   volumeToken0: BigDecimal!
@@ -85,10 +102,12 @@ type Pool {
 
   # Timestamps
   createdAt: BigInt!
+  createdAtBlock: BigInt!
   lastSwapAt: BigInt!
 
   # Derived fields
   swaps: [Swap!]! @derivedFrom(field: "pool")
+  transfers: [Transfer!]! @derivedFrom(field: "relatedPool")
 }
 
 # Swap entity - Individual swap records

@@ -3,6 +3,8 @@
  */
 
 // Import handlers - they will auto-register when imported
+import "./handlers/factory-handler";
+import "./handlers/initialize-handler";
 import "./handlers/transfer-handler";
 import "./handlers/swap-handler";
 

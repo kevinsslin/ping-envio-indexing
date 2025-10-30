@@ -1,15 +1,14 @@
 /**
- * Swap event handler for Uniswap V3 Pool
- * Tracks swap events, pool statistics, and daily activity
+ * Swap event handler for Uniswap V3 Pools
+ * Tracks swap events, pool statistics, and daily activity for all PING pools
  */
 import { UniswapV3Pool, Pool, Swap, DailyPoolActivity } from "generated";
 import {
-  POOL_ADDRESS,
-  TOKEN_ADDRESS,
-  TOKEN_DECIMALS,
+  PING_TOKEN_ADDRESS,
   ZERO_BD,
   ONE_BI,
   ONE_BD,
+  ZERO_BI,
 } from "../utils/constants";
 import {
   convertTokenToDecimal,
@@ -18,19 +17,43 @@ import {
   normalizeAddress,
 } from "../utils/index";
 
-// Pool configuration based on actual contract query
-// Pool: 0xBc51DB8aEC659027AE0B0E468C0735418161A780 (USDC-PING on Base)
-const TOKEN0_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"; // USDC
-const TOKEN1_ADDRESS = TOKEN_ADDRESS; // PING (0xd85c31854c2B0Fb40aaA9E2Fc4Da23C21f829d46)
-const TOKEN0_DECIMALS = 6n; // USDC has 6 decimals
-const TOKEN1_DECIMALS = TOKEN_DECIMALS; // PING decimals from constants
+/**
+ * Get token decimals for known tokens
+ * Add more tokens as needed
+ */
+function getTokenDecimals(tokenAddress: string): bigint {
+  const addr = tokenAddress.toLowerCase();
 
-// Fee tier: 3000 = 0.30%
-const FEE_TIER = 3000n;
+  // PING token
+  if (addr === PING_TOKEN_ADDRESS.toLowerCase()) {
+    return 18n;
+  }
+
+  // USDC on Base
+  if (addr === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") {
+    return 6n;
+  }
+
+  // WETH on Base
+  if (addr === "0x4200000000000000000000000000000000000006") {
+    return 18n;
+  }
+
+  // DAI on Base
+  if (addr === "0x50c5725949a6f0c72e6c4a641f24049a917db0cb") {
+    return 18n;
+  }
+
+  // Default to 18 decimals (most ERC20 tokens use 18)
+  return 18n;
+}
 
 UniswapV3Pool.Swap.handler(async ({ event, context }) => {
   const chainId = BigInt(event.chainId);
-  const poolId = `${chainId}_${normalizeAddress(POOL_ADDRESS)}`;
+
+  // Get the pool address from the event source
+  const poolAddress = normalizeAddress(event.srcAddress);
+  const poolId = `${chainId}_${poolAddress}`;
   const dayId = getDayId(BigInt(event.block.timestamp));
 
   // Load entities in parallel
@@ -44,6 +67,19 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
     return;
   }
 
+  // If pool doesn't exist, it wasn't created by PoolCreated handler
+  // This should only happen for the hardcoded pool before factory was added
+  if (!pool) {
+    context.log.warn(
+      `Pool ${poolAddress} not found in database. Skipping swap event.`
+    );
+    return;
+  }
+
+  // Get token decimals
+  const token0Decimals = getTokenDecimals(pool.token0);
+  const token1Decimals = getTokenDecimals(pool.token1);
+
   // Convert amounts to decimal
   // In Uniswap V3, negative amount means tokens going into the pool
   // Positive amount means tokens coming out of the pool
@@ -53,11 +89,11 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
   // Convert to BigDecimal, preserving sign
   const amount0 = convertTokenToDecimal(
     amount0Raw < 0 ? -amount0Raw : amount0Raw,
-    TOKEN0_DECIMALS
+    token0Decimals
   );
   const amount1 = convertTokenToDecimal(
     amount1Raw < 0 ? -amount1Raw : amount1Raw,
-    TOKEN1_DECIMALS
+    token1Decimals
   );
 
   // Apply sign back
@@ -68,39 +104,23 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
   const amount0Abs = amount0;
   const amount1Abs = amount1;
 
-  // Initialize or update Pool entity
-  const poolEntity: Pool = pool
-    ? {
-        ...pool,
-        liquidity: event.params.liquidity,
-        sqrtPriceX96: event.params.sqrtPriceX96,
-        tick: event.params.tick,
-        volumeToken0: pool.volumeToken0.plus(amount0Abs),
-        volumeToken1: pool.volumeToken1.plus(amount1Abs),
-        txCount: pool.txCount + ONE_BI,
-        lastSwapAt: BigInt(event.block.timestamp),
-        // Note: totalValueLocked calculations would require price data
-        // For now, we're not updating TVL in the swap handler
-      }
-    : {
-        // First swap - initialize pool
-        id: poolId,
-        chainId,
-        address: POOL_ADDRESS,
-        token0: TOKEN0_ADDRESS,
-        token1: TOKEN1_ADDRESS,
-        feeTier: FEE_TIER,
-        liquidity: event.params.liquidity,
-        sqrtPriceX96: event.params.sqrtPriceX96,
-        tick: event.params.tick,
-        volumeToken0: amount0Abs,
-        volumeToken1: amount1Abs,
-        txCount: ONE_BI,
-        totalValueLockedToken0: ZERO_BD,
-        totalValueLockedToken1: ZERO_BD,
-        createdAt: BigInt(event.block.timestamp),
-        lastSwapAt: BigInt(event.block.timestamp),
-      };
+  const currentLiquidity = event.params.liquidity;
+  const isActive = currentLiquidity > ZERO_BI;
+
+  // Update Pool entity
+  const poolEntity: Pool = {
+    ...pool,
+    liquidity: currentLiquidity,
+    sqrtPriceX96: event.params.sqrtPriceX96,
+    tick: event.params.tick,
+    isActive,
+    volumeToken0: pool.volumeToken0.plus(amount0Abs),
+    volumeToken1: pool.volumeToken1.plus(amount1Abs),
+    txCount: pool.txCount + ONE_BI,
+    lastSwapAt: BigInt(event.block.timestamp),
+    // Note: totalValueLocked calculations would require price data
+    // For now, we're not updating TVL in the swap handler
+  };
 
   // Create Swap record
   const swapEntity: Swap = {
@@ -111,12 +131,12 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
     blockNumber: BigInt(event.block.number),
     logIndex: BigInt(event.logIndex),
     pool_id: poolId,
-    sender: event.params.sender,
-    recipient: event.params.recipient,
+    sender: normalizeAddress(event.params.sender),
+    recipient: normalizeAddress(event.params.recipient),
     amount0: amount0Signed,
     amount1: amount1Signed,
     sqrtPriceX96: event.params.sqrtPriceX96,
-    liquidity: event.params.liquidity,
+    liquidity: currentLiquidity,
     tick: event.params.tick,
   };
 
@@ -129,20 +149,20 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
         dailySwaps: dailyActivity.dailySwaps + ONE_BI,
         dailyVolumeToken0: dailyActivity.dailyVolumeToken0.plus(amount0Abs),
         dailyVolumeToken1: dailyActivity.dailyVolumeToken1.plus(amount1Abs),
-        liquidityEnd: event.params.liquidity,
+        liquidityEnd: currentLiquidity,
         sqrtPriceX96End: event.params.sqrtPriceX96,
       }
     : {
         id: `${poolId}_${dayId}`,
         chainId,
-        pool: POOL_ADDRESS,
+        pool: poolAddress,
         date: dayId,
         timestamp: dayStartTimestamp,
         dailySwaps: ONE_BI,
         dailyVolumeToken0: amount0Abs,
         dailyVolumeToken1: amount1Abs,
-        liquidityStart: event.params.liquidity,
-        liquidityEnd: event.params.liquidity,
+        liquidityStart: currentLiquidity,
+        liquidityEnd: currentLiquidity,
         sqrtPriceX96Start: event.params.sqrtPriceX96,
         sqrtPriceX96End: event.params.sqrtPriceX96,
       };
@@ -151,4 +171,8 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
   context.Pool.set(poolEntity);
   context.Swap.set(swapEntity);
   context.DailyPoolActivity.set(updatedDailyActivity);
+
+  context.log.info(
+    `Processed swap for pool ${poolAddress}: ${amount0Abs} token0 / ${amount1Abs} token1`
+  );
 });
