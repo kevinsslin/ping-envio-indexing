@@ -1,9 +1,7 @@
 /**
- * ERC20 Token Metadata Fetcher
- * Fetches token name, symbol, and decimals from contract using JSON-RPC calls
+ * ERC20 Token Metadata
+ * Uses hardcoded metadata for known Base tokens since fetch() is not available in Envio runtime
  */
-
-const RPC_URL = process.env.RPC_URL || "https://mainnet.base.org";
 
 /**
  * Token metadata structure
@@ -15,106 +13,62 @@ export interface TokenMetadata {
 }
 
 /**
- * JSON-RPC response type
+ * Known token metadata on Base chain (chainId: 8453)
+ * This is the source of truth for token metadata to ensure correct decimal handling
+ *
+ * CRITICAL: USDC has 6 decimals, not 18!
  */
-interface JsonRpcResponse {
-  jsonrpc: string;
-  id: number;
-  result?: string;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
+const KNOWN_TOKENS: Record<string, TokenMetadata> = {
+  // USDC on Base - 6 decimals (CRITICAL!)
+  "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {
+    symbol: "USDC",
+    name: "USD Coin",
+    decimals: 6n,
+  },
+
+  // WETH on Base - 18 decimals
+  "0x4200000000000000000000000000000000000006": {
+    symbol: "WETH",
+    name: "Wrapped Ether",
+    decimals: 18n,
+  },
+
+  // DAI on Base - 18 decimals
+  "0x50c5725949a6f0c72e6c4a641f24049a917db0cb": {
+    symbol: "DAI",
+    name: "Dai Stablecoin",
+    decimals: 18n,
+  },
+
+  // PING token - 18 decimals
+  "0xd85c31854c2b0fb40aaa9e2fc4da23c21f829d46": {
+    symbol: "PING",
+    name: "Ping",
+    decimals: 18n,
+  },
+
+  // cbETH on Base - 18 decimals
+  "0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22": {
+    symbol: "cbETH",
+    name: "Coinbase Wrapped Staked ETH",
+    decimals: 18n,
+  },
+
+  // USDbC (Bridged USDC) on Base - 6 decimals
+  "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca": {
+    symbol: "USDbC",
+    name: "USD Base Coin",
+    decimals: 6n,
+  },
+};
 
 /**
- * Make an eth_call to a contract
- */
-async function call(to: string, data: string): Promise<string> {
-  try {
-    const response = await fetch(RPC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_call",
-        params: [{ to, data }, "latest"],
-      }),
-    });
-    const result = (await response.json()) as JsonRpcResponse;
-
-    if (result.error) {
-      throw new Error(result.error.message || "RPC call failed");
-    }
-
-    if (!result.result) {
-      throw new Error("No result returned from RPC call");
-    }
-
-    return result.result;
-  } catch (error) {
-    console.error(`RPC call failed for ${to} with data ${data}:`, error);
-    throw error;
-  }
-}
-
-/**
- * Decode a string from ABI-encoded hex data
- */
-function decodeString(hexData: string): string {
-  try {
-    const hex = hexData.slice(2); // Remove 0x
-    const length = parseInt(hex.slice(64, 128), 16);
-    const bytes = hex.slice(128, 128 + length * 2);
-    return Buffer.from(bytes, "hex").toString("utf8");
-  } catch (error) {
-    console.error("Failed to decode string:", error);
-    return "UNKNOWN";
-  }
-}
-
-/**
- * Fetch symbol for an ERC20 token
- */
-async function fetchSymbol(tokenAddress: string): Promise<string> {
-  try {
-    const result = await call(tokenAddress, "0x95d89b41"); // symbol()
-    return decodeString(result);
-  } catch (error) {
-    console.warn(`Failed to fetch symbol for ${tokenAddress}, using default`);
-    return "UNKNOWN";
-  }
-}
-
-/**
- * Fetch name for an ERC20 token
- */
-async function fetchName(tokenAddress: string): Promise<string> {
-  try {
-    const result = await call(tokenAddress, "0x06fdde03"); // name()
-    return decodeString(result);
-  } catch (error) {
-    console.warn(`Failed to fetch name for ${tokenAddress}, using default`);
-    return "Unknown Token";
-  }
-}
-
-/**
- * Fetch decimals for an ERC20 token
- */
-async function fetchDecimals(tokenAddress: string): Promise<bigint> {
-  try {
-    const result = await call(tokenAddress, "0x313ce567"); // decimals()
-    return BigInt(parseInt(result, 16));
-  } catch (error) {
-    console.warn(`Failed to fetch decimals for ${tokenAddress}, using default 18`);
-    return 18n;
-  }
-}
-
-/**
- * Fetch all metadata for an ERC20 token
+ * Fetch token metadata for a given token address
+ *
+ * NOTE: This function uses hardcoded values because Envio's runtime environment
+ * does not support fetch() API for external RPC calls. For dynamic token metadata,
+ * Envio's Effect system would need to be implemented.
+ *
  * @param tokenAddress - The token contract address
  * @returns Token metadata (symbol, name, decimals)
  */
@@ -123,36 +77,39 @@ export async function fetchTokenMetadata(
 ): Promise<TokenMetadata> {
   const normalizedAddress = tokenAddress.toLowerCase();
 
-  console.log(`Fetching metadata for token: ${normalizedAddress}`);
-
-  try {
-    // Fetch all metadata in parallel for better performance
-    const [symbol, name, decimals] = await Promise.all([
-      fetchSymbol(normalizedAddress),
-      fetchName(normalizedAddress),
-      fetchDecimals(normalizedAddress),
-    ]);
-
+  // Check if token is in our known tokens map
+  if (KNOWN_TOKENS[normalizedAddress]) {
+    const metadata = KNOWN_TOKENS[normalizedAddress];
     console.log(
-      `Token metadata fetched: ${symbol} (${name}) - ${decimals} decimals`
+      `Token metadata (hardcoded): ${metadata.symbol} (${metadata.name}) - ${metadata.decimals} decimals`
     );
-
-    return {
-      symbol,
-      name,
-      decimals,
-    };
-  } catch (error) {
-    console.error(
-      `Failed to fetch token metadata for ${normalizedAddress}:`,
-      error
-    );
-
-    // Return safe defaults
-    return {
-      symbol: "UNKNOWN",
-      name: "Unknown Token",
-      decimals: 18n,
-    };
+    return metadata;
   }
+
+  // Unknown token - log warning and return defaults
+  console.warn(
+    `Unknown token ${normalizedAddress} - using defaults (UNKNOWN, 18 decimals). ` +
+    `Consider adding to KNOWN_TOKENS map if this is a well-known token.`
+  );
+
+  return {
+    symbol: "UNKNOWN",
+    name: "Unknown Token",
+    decimals: 18n, // Most ERC20 tokens use 18 decimals
+  };
+}
+
+/**
+ * Add a new token to the known tokens map (for future use)
+ * This can be called from handlers if needed to dynamically register tokens
+ */
+export function registerToken(
+  address: string,
+  metadata: TokenMetadata
+): void {
+  const normalizedAddress = address.toLowerCase();
+  KNOWN_TOKENS[normalizedAddress] = metadata;
+  console.log(
+    `Registered token: ${metadata.symbol} (${metadata.name}) at ${normalizedAddress}`
+  );
 }
