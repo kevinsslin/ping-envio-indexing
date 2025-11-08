@@ -4,8 +4,6 @@
  * Handles events from the singleton PoolManager contract:
  * - Initialize: Pool creation (replaces Factory.PoolCreated in V3)
  * - Swap: Swap events within pools
- * - ModifyLiquidity: Liquidity changes (replaces Mint/Burn in V3)
- * - Donate: Donations to pools (new in V4)
  */
 
 import {
@@ -13,7 +11,6 @@ import {
   PoolV4,
   PoolV4Registry,
   SwapV4,
-  ModifyLiquidityV4,
   Account,
 } from "generated";
 import {
@@ -21,16 +18,9 @@ import {
   ZERO_BI,
   ZERO_BD,
   ONE_BI,
-  LIQUIDITY_ADD,
-  LIQUIDITY_REMOVE,
 } from "./utils/constants";
 import { fetchTokenMetadata } from "./utils/token-metadata";
-import {
-  getSqrtRatioAtTick,
-  getLiquidityAmounts,
-  convertToDecimal,
-  abs,
-} from "./utils/v4-tick-math";
+import { abs, convertToDecimal } from "./utils/v4-tick-math";
 
 /**
  * Helper to convert token amount to decimal
@@ -304,114 +294,4 @@ UniswapV4PoolManager.Swap.handler(async ({ event, context }) => {
       }
     }
   }
-});
-
-/**
- * Handle ModifyLiquidity events for V4 pools
- * This replaces V3's separate Mint and Burn events
- */
-UniswapV4PoolManager.ModifyLiquidity.handler(async ({ event, context }) => {
-  const { id: poolId, sender, tickLower, tickUpper, liquidityDelta, salt } = event.params;
-  const chainId = BigInt(event.chainId);
-
-  // Check if this is a PING pool
-  const registry = await context.PoolV4Registry.get(poolId);
-  if (!registry || !registry.isPingPool) {
-    return; // Skip non-PING pools
-  }
-
-  // Load pool
-  const poolEntityId = `${chainId}_${poolId}`;
-  const pool = await context.PoolV4.get(poolEntityId);
-  if (!pool) {
-    context.log.warn(`Pool ${poolId} not found when processing ModifyLiquidity`);
-    return;
-  }
-
-  const liquidityDeltaBigInt = BigInt(liquidityDelta);
-  const isAdd = liquidityDeltaBigInt >= BigInt(0);
-
-  // Calculate token amounts using tick math
-  const sqrtPriceLowerX96 = getSqrtRatioAtTick(Number(tickLower));
-  const sqrtPriceUpperX96 = getSqrtRatioAtTick(Number(tickUpper));
-  const currentSqrtPriceX96 = pool.sqrtPriceX96;
-
-  const { amount0, amount1 } = getLiquidityAmounts(
-    currentSqrtPriceX96,
-    sqrtPriceLowerX96,
-    sqrtPriceUpperX96,
-    liquidityDeltaBigInt
-  );
-
-  // Convert to decimals
-  const amount0Dec = amount0 !== ZERO_BI
-    ? convertTokenToDecimal(abs(amount0), pool.currency0Decimals)
-    : ZERO_BD;
-  const amount1Dec = amount1 !== ZERO_BI
-    ? convertTokenToDecimal(abs(amount1), pool.currency1Decimals)
-    : ZERO_BD;
-
-  // Update pool liquidity
-  const newLiquidity = pool.liquidity + liquidityDeltaBigInt;
-  const updatedPool: PoolV4 = {
-    ...pool,
-    liquidity: newLiquidity,
-    isActive: newLiquidity > ZERO_BI,
-    // Update TVL (simplified - in production, you'd want to track this more precisely)
-    totalValueLockedCurrency0: isAdd
-      ? pool.totalValueLockedCurrency0.plus(amount0Dec)
-      : pool.totalValueLockedCurrency0.minus(amount0Dec),
-    totalValueLockedCurrency1: isAdd
-      ? pool.totalValueLockedCurrency1.plus(amount1Dec)
-      : pool.totalValueLockedCurrency1.minus(amount1Dec),
-  };
-
-  // Create ModifyLiquidityV4 record
-  const modifyLiquidityId = `${chainId}_${event.block.number}_${event.logIndex}`;
-  const modifyLiquidityEntity: ModifyLiquidityV4 = {
-    id: modifyLiquidityId,
-    chainId,
-    transactionHash: event.transaction.hash,
-    timestamp: BigInt(event.block.timestamp),
-    blockNumber: BigInt(event.block.number),
-    logIndex: BigInt(event.logIndex),
-    pool_id: poolEntityId,
-    poolId,
-    sender: sender.toLowerCase(),
-    tickLower: BigInt(tickLower),
-    tickUpper: BigInt(tickUpper),
-    liquidityDelta: liquidityDeltaBigInt,
-    salt,
-    amount0: amount0Dec,
-    amount1: amount1Dec,
-    modificationType: isAdd ? LIQUIDITY_ADD : LIQUIDITY_REMOVE,
-  };
-
-  context.PoolV4.set(updatedPool);
-  context.ModifyLiquidityV4.set(modifyLiquidityEntity);
-
-  context.log.info(
-    `ModifyLiquidity recorded for pool ${poolId}: ${isAdd ? 'ADD' : 'REMOVE'} ${liquidityDelta} at block ${event.block.number}`
-  );
-});
-
-/**
- * Handle Donate events for V4 pools (optional)
- * Donations directly add to pool reserves without minting LP tokens
- */
-UniswapV4PoolManager.Donate.handler(async ({ event, context }) => {
-  const { id: poolId, sender, amount0, amount1 } = event.params;
-
-  // Check if this is a PING pool
-  const registry = await context.PoolV4Registry.get(poolId);
-  if (!registry || !registry.isPingPool) {
-    return; // Skip non-PING pools
-  }
-
-  context.log.info(
-    `Donate event for pool ${poolId}: ${amount0} / ${amount1} from ${sender} at block ${event.block.number}`
-  );
-
-  // Optional: Track donations as part of pool statistics
-  // For now, just log the event
 });
