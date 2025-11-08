@@ -1,8 +1,9 @@
 /**
  * Transfer event handler
  * Tracks token transfers, account balances, buy/sell activity, and daily metrics
+ * Supports both Uniswap V3 and V4 pools
  */
-import { Ping, Account, Transfer, Token, DailyTokenActivity, Pool } from "generated";
+import { Ping, Account, Transfer, Token, DailyTokenActivity, Pool, PoolV4 } from "generated";
 import {
   PING_TOKEN_ADDRESS,
   TOKEN_DECIMALS,
@@ -15,6 +16,7 @@ import {
   POOL_RELATION_SELL,
   POOL_RELATION_NONE,
   ADDRESS_ZERO,
+  UNISWAP_V4_POOL_MANAGER,
 } from "../utils/constants";
 import {
   convertTokenToDecimal,
@@ -207,6 +209,7 @@ Ping.Transfer.handler(async ({ event, context }) => {
     isPoolRelated,
     poolRelatedType,
     relatedPool_id: relatedPool ? relatedPool.id : undefined,
+    relatedPoolV4_id: undefined, // V4 pool tracking (will be set by V4 handlers if needed)
   };
 
   // Update or create DailyTokenActivity

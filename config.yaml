@@ -23,6 +23,7 @@ networks:
       field_selection:
         transaction_fields:
           - hash
+  # Uniswap V3 contracts
   - name: UniswapV3Factory
     address:
     - 0x33128a8fC17869897dcE68Ed026d694621f6FDfD
@@ -45,5 +46,32 @@ networks:
         transaction_fields:
           - hash
           - from
+  # Uniswap V4 contracts
+  - name: UniswapV4PoolManager
+    address:
+    - 0x498581fF718922c3f8e6A244956aF099B2652b2b
+    handler: src/EventHandlersV4.ts
+    events:
+    # Pool initialization event (replaces Factory.PoolCreated in V3)
+    - event: Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)
+      field_selection:
+        transaction_fields:
+          - hash
+    # Swap event
+    - event: Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 swapFee)
+      field_selection:
+        transaction_fields:
+          - hash
+          - from
+    # Liquidity modification event (replaces separate Mint/Burn in V3)
+    - event: ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)
+      field_selection:
+        transaction_fields:
+          - hash
+    # Donate event (new in V4)
+    - event: Donate(bytes32 indexed id, address indexed sender, uint256 amount0, uint256 amount1)
+      field_selection:
+        transaction_fields:
+          - hash
 unordered_multichain_mode: true
 preload_handlers: true

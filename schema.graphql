@@ -65,10 +65,13 @@ type Transfer @index(fields: ["timestamp", "isPoolRelated"]) {
   to: Account!
   value: BigDecimal!
 
-  # Pool relation
+  # Pool relation (V3)
   isPoolRelated: Boolean! # True if from or to is a Pool address
   poolRelatedType: String # "BUY" (from pool), "SELL" (to pool), or "NONE"
-  relatedPool: Pool # The pool involved in this transfer (if any)
+  relatedPool: Pool # The V3 pool involved in this transfer (if any)
+
+  # V4 Pool relation
+  relatedPoolV4: PoolV4 # The V4 pool involved in this transfer (if any)
 }
 
 # Pool entity - Uniswap V3 Pool statistics
@@ -180,4 +183,152 @@ type DailyPoolActivity {
   # Price snapshots
   sqrtPriceX96Start: BigInt!
   sqrtPriceX96End: BigInt!
+}
+
+# ============================================
+# UNISWAP V4 ENTITIES
+# ============================================
+
+# PoolV4Registry - Quick lookup table for PING V4 pools
+type PoolV4Registry {
+  id: ID! # poolId (bytes32 hash as hex string)
+  poolId: String! # PoolId as hex string
+  isPingPool: Boolean! # True if pool contains PING token
+  currency0: String! # Currency0 address (lowercase)
+  currency1: String! # Currency1 address (lowercase)
+}
+
+# PoolV4 - Uniswap V4 Pool statistics (singleton PoolManager pattern)
+type PoolV4 {
+  id: ID! # chainId_poolId
+  chainId: BigInt!
+  poolId: String! # bytes32 PoolId hash as hex string
+
+  # PoolKey components (immutable)
+  currency0: String! # Currency address (or native ETH marker)
+  currency1: String! # Currency address (or native ETH marker)
+  fee: BigInt! # LP fee in hundredths of bps (max 1,000,000)
+  tickSpacing: BigInt! # Tick spacing
+  hooks: String! # Hooks contract address
+
+  # Currency0 metadata (for frontend display)
+  currency0Symbol: String! # e.g., "PING"
+  currency0Name: String! # e.g., "Ping"
+  currency0Decimals: BigInt! # e.g., 18
+
+  # Currency1 metadata (for frontend display)
+  currency1Symbol: String! # e.g., "USDC"
+  currency1Name: String! # e.g., "USD Coin"
+  currency1Decimals: BigInt! # e.g., 6
+
+  # Current state
+  liquidity: BigInt! @index # For filtering pools by liquidity
+  sqrtPriceX96: BigInt!
+  tick: BigInt!
+
+  # Status
+  isActive: Boolean! # Has sufficient liquidity (>0)
+
+  # Volume stats
+  volumeCurrency0: BigDecimal!
+  volumeCurrency1: BigDecimal!
+  txCount: BigInt! @index
+
+  # TVL
+  totalValueLockedCurrency0: BigDecimal!
+  totalValueLockedCurrency1: BigDecimal!
+
+  # Timestamps
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+  lastSwapAt: BigInt!
+
+  # Derived fields
+  swaps: [SwapV4!]! @derivedFrom(field: "pool")
+  liquidityChanges: [ModifyLiquidityV4!]! @derivedFrom(field: "pool")
+  transfers: [Transfer!]! @derivedFrom(field: "relatedPoolV4")
+}
+
+# SwapV4 - Individual V4 swap records
+type SwapV4 @index(fields: ["timestamp", "pool"]) {
+  id: ID! # chainId_blockNumber_logIndex
+  chainId: BigInt!
+  transactionHash: String!
+  timestamp: BigInt! @index
+  blockNumber: BigInt!
+  logIndex: BigInt!
+
+  # Swap details
+  pool: PoolV4!
+  poolId: String! # For direct querying by poolId
+  sender: String! # Address that initiated the swap
+
+  # Amounts (signed: negative = token out, positive = token in)
+  amount0: BigDecimal!
+  amount1: BigDecimal!
+
+  # Pool state after swap
+  sqrtPriceX96: BigInt!
+  liquidity: BigInt!
+  tick: BigInt!
+
+  # V4-specific: dynamic swap fee
+  swapFee: BigInt! # Fee in hundredths of bps
+}
+
+# ModifyLiquidityV4 - Liquidity changes in V4 pools (replaces Mint/Burn)
+type ModifyLiquidityV4 @index(fields: ["timestamp", "pool"]) {
+  id: ID! # chainId_blockNumber_logIndex
+  chainId: BigInt!
+  transactionHash: String!
+  timestamp: BigInt! @index
+  blockNumber: BigInt!
+  logIndex: BigInt!
+
+  # Liquidity modification details
+  pool: PoolV4!
+  poolId: String! # For direct querying
+  sender: String! # Address that modified liquidity
+
+  # Position range
+  tickLower: BigInt!
+  tickUpper: BigInt!
+
+  # Liquidity delta (signed: positive = add, negative = remove)
+  liquidityDelta: BigInt!
+  salt: String! # bytes32 salt for position identification
+
+  # Calculated amounts (derived from liquidityDelta + tick math)
+  # These are computed in the handler using tick math utilities
+  amount0: BigDecimal
+  amount1: BigDecimal
+
+  # Type indicator
+  modificationType: String! # "ADD" or "REMOVE"
+}
+
+# DailyPoolActivityV4 - Daily aggregated V4 pool statistics
+type DailyPoolActivityV4 {
+  id: ID! # chainId_poolId_date
+  chainId: BigInt!
+  poolId: String! # PoolId hash
+  date: String! # YYYY-MM-DD format
+  timestamp: BigInt! # Start of day timestamp
+
+  # Swap stats
+  dailySwaps: BigInt!
+  dailyVolumeCurrency0: BigDecimal!
+  dailyVolumeCurrency1: BigDecimal!
+
+  # Liquidity snapshots
+  liquidityStart: BigInt! # Liquidity at start of day
+  liquidityEnd: BigInt! # Liquidity at end of day
+
+  # Price snapshots
+  sqrtPriceX96Start: BigInt!
+  sqrtPriceX96End: BigInt!
+
+  # Liquidity changes
+  dailyLiquidityAdds: BigInt!
+  dailyLiquidityRemoves: BigInt!
 }

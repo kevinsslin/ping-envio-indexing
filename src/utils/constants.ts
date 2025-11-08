@@ -37,3 +37,14 @@ export const POOL_RELATION_NONE = "NONE";
 export const TOKEN_SYMBOL = "PING";
 export const TOKEN_NAME = "Ping";
 export const TOKEN_DECIMALS = 18n;
+
+/**
+ * Uniswap V4 Addresses
+ */
+export const UNISWAP_V4_POOL_MANAGER = "0x498581fF718922c3f8e6A244956aF099B2652b2b";
+
+/**
+ * ModifyLiquidity types
+ */
+export const LIQUIDITY_ADD = "ADD";
+export const LIQUIDITY_REMOVE = "REMOVE";
