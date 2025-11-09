@@ -163,18 +163,19 @@ type DailyTokenActivity {
   newAccounts: BigInt! # New addresses that received their first tokens
 }
 
-# DailyPoolActivity - Daily aggregated pool statistics
+# DailyPoolActivity - Daily aggregated pool statistics (unified for V3 and V4)
 type DailyPoolActivity {
-  id: ID! # chainId_poolAddress_date
+  id: ID! # chainId_poolIdentifier_date
   chainId: BigInt!
-  pool: String! # Pool address
+  poolIdentifier: String! # Pool address (V3) or PoolId hash (V4)
+  poolVersion: String! # "V3" or "V4"
   date: String! # YYYY-MM-DD format
   timestamp: BigInt! # Start of day timestamp
 
   # Swap stats
   dailySwaps: BigInt!
-  dailyVolumeToken0: BigDecimal!
-  dailyVolumeToken1: BigDecimal!
+  dailyVolume0: BigDecimal!
+  dailyVolume1: BigDecimal!
 
   # Liquidity snapshots
   liquidityStart: BigInt! # Liquidity at start of day
@@ -183,6 +184,10 @@ type DailyPoolActivity {
   # Price snapshots
   sqrtPriceX96Start: BigInt!
   sqrtPriceX96End: BigInt!
+
+  # Liquidity changes (only populated for V4, null for V3)
+  dailyLiquidityAdds: BigInt
+  dailyLiquidityRemoves: BigInt
 }
 
 # ============================================
@@ -307,28 +312,3 @@ type ModifyLiquidityV4 @index(fields: ["timestamp", "pool"]) {
   modificationType: String! # "ADD" or "REMOVE"
 }
 
-# DailyPoolActivityV4 - Daily aggregated V4 pool statistics
-type DailyPoolActivityV4 {
-  id: ID! # chainId_poolId_date
-  chainId: BigInt!
-  poolId: String! # PoolId hash
-  date: String! # YYYY-MM-DD format
-  timestamp: BigInt! # Start of day timestamp
-
-  # Swap stats
-  dailySwaps: BigInt!
-  dailyVolumeCurrency0: BigDecimal!
-  dailyVolumeCurrency1: BigDecimal!
-
-  # Liquidity snapshots
-  liquidityStart: BigInt! # Liquidity at start of day
-  liquidityEnd: BigInt! # Liquidity at end of day
-
-  # Price snapshots
-  sqrtPriceX96Start: BigInt!
-  sqrtPriceX96End: BigInt!
-
-  # Liquidity changes
-  dailyLiquidityAdds: BigInt!
-  dailyLiquidityRemoves: BigInt!
-}

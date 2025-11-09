@@ -11,6 +11,7 @@ import {
   PoolV4,
   PoolV4Registry,
   SwapV4,
+  DailyPoolActivity,
   Account,
 } from "generated";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./utils/constants";
 import { fetchTokenMetadata } from "./utils/token-metadata";
 import { abs, convertToDecimal } from "./utils/v4-tick-math";
+import { getDayId, getDayStartTimestamp } from "./utils/index";
 
 /**
  * Helper to convert token amount to decimal
@@ -135,9 +137,16 @@ UniswapV4PoolManager.Swap.handler(async ({ event, context }) => {
     return; // Skip non-PING pools
   }
 
-  // Load pool
+  // Get day ID for daily activity tracking
+  const dayId = getDayId(BigInt(event.block.timestamp));
   const poolEntityId = `${chainId}_${poolId}`;
-  const pool = await context.PoolV4.get(poolEntityId);
+
+  // Load pool and daily activity in parallel
+  const [pool, dailyActivity] = await Promise.all([
+    context.PoolV4.get(poolEntityId),
+    context.DailyPoolActivity.get(`${poolEntityId}_${dayId}`),
+  ]);
+
   if (!pool) {
     context.log.warn(`Pool ${poolId} not found when processing Swap`);
     return;
@@ -190,8 +199,40 @@ UniswapV4PoolManager.Swap.handler(async ({ event, context }) => {
     swapFee: BigInt(swapFee),
   };
 
+  // Update or create DailyPoolActivity (unified for V3 and V4)
+  const dayStartTimestamp = getDayStartTimestamp(BigInt(event.block.timestamp));
+
+  const updatedDailyActivity: DailyPoolActivity = dailyActivity
+    ? {
+        ...dailyActivity,
+        dailySwaps: dailyActivity.dailySwaps + ONE_BI,
+        dailyVolume0: dailyActivity.dailyVolume0.plus(amount0Dec),
+        dailyVolume1: dailyActivity.dailyVolume1.plus(amount1Dec),
+        liquidityEnd: BigInt(liquidity),
+        sqrtPriceX96End: BigInt(sqrtPriceX96),
+      }
+    : {
+        id: `${poolEntityId}_${dayId}`,
+        chainId,
+        poolIdentifier: poolId,
+        poolVersion: "V4",
+        date: dayId,
+        timestamp: dayStartTimestamp,
+        dailySwaps: ONE_BI,
+        dailyVolume0: amount0Dec,
+        dailyVolume1: amount1Dec,
+        liquidityStart: BigInt(liquidity),
+        liquidityEnd: BigInt(liquidity),
+        sqrtPriceX96Start: BigInt(sqrtPriceX96),
+        sqrtPriceX96End: BigInt(sqrtPriceX96),
+        dailyLiquidityAdds: ZERO_BI,
+        dailyLiquidityRemoves: ZERO_BI,
+      };
+
+  // Save all entities
   context.PoolV4.set(updatedPool);
   context.SwapV4.set(swapEntity);
+  context.DailyPoolActivity.set(updatedDailyActivity);
 
   context.log.info(
     `Swap recorded for pool ${poolId}: ${amount0} / ${amount1} at block ${event.block.number}`

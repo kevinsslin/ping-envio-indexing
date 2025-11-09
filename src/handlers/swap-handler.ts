@@ -203,31 +203,34 @@ UniswapV3Pool.Swap.handler(async ({ event, context }) => {
     }
   }
 
-  // Update or create DailyPoolActivity
+  // Update or create DailyPoolActivity (unified for V3 and V4)
   const dayStartTimestamp = getDayStartTimestamp(BigInt(event.block.timestamp));
 
   const updatedDailyActivity: DailyPoolActivity = dailyActivity
     ? {
         ...dailyActivity,
         dailySwaps: dailyActivity.dailySwaps + ONE_BI,
-        dailyVolumeToken0: dailyActivity.dailyVolumeToken0.plus(amount0Abs),
-        dailyVolumeToken1: dailyActivity.dailyVolumeToken1.plus(amount1Abs),
+        dailyVolume0: dailyActivity.dailyVolume0.plus(amount0Abs),
+        dailyVolume1: dailyActivity.dailyVolume1.plus(amount1Abs),
         liquidityEnd: currentLiquidity,
         sqrtPriceX96End: event.params.sqrtPriceX96,
       }
     : {
         id: `${poolId}_${dayId}`,
         chainId,
-        pool: poolAddress,
+        poolIdentifier: poolAddress,
+        poolVersion: "V3",
         date: dayId,
         timestamp: dayStartTimestamp,
         dailySwaps: ONE_BI,
-        dailyVolumeToken0: amount0Abs,
-        dailyVolumeToken1: amount1Abs,
+        dailyVolume0: amount0Abs,
+        dailyVolume1: amount1Abs,
         liquidityStart: currentLiquidity,
         liquidityEnd: currentLiquidity,
         sqrtPriceX96Start: event.params.sqrtPriceX96,
         sqrtPriceX96End: event.params.sqrtPriceX96,
+        dailyLiquidityAdds: undefined,
+        dailyLiquidityRemoves: undefined,
       };
 
   // Save all entities
